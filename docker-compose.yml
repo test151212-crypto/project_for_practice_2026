@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: freelance
+      POSTGRES_USER: freelance_user
+      POSTGRES_PASSWORD: freelance_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DATABASE_URL=postgres://freelance_user:freelance_pass@db:5432/freelance
+      - REDIS_URL=redis://redis:6379
+
+  celery_worker:
+    build: .
+    command: celery -A freelance worker --loglevel=info
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DATABASE_URL=postgres://freelance_user:freelance_pass@db:5432/freelance
+      - REDIS_URL=redis://redis:6379
+
+  celery_beat:
+    build: .
+    command: celery -A freelance beat --loglevel=info
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+
+volumes:
+  postgres_data:
