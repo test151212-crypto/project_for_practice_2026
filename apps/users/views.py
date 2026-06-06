@@ -7,11 +7,23 @@ import random
 from .models import User, FreelancerProfile, CustomerProfile
 from .serializers import UserSerializer, FreelancerProfileSerializer, CustomerProfileSerializer
 from .permissions import IsFreelancer, IsCustomer, IsAdmin
+from rest_framework import permissions
+from rest_framework import viewsets, status
+from rest_framework.permissions import AllowAny
+from .serializers import RegisterSerializer
+
+
+
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAdminUser]
+
+    def get_permissions(self):
+        if self.action == 'create':
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
 
     @action(detail=True, methods=['post'], permission_classes=[IsAdmin])
     def block(self, request, pk=None):
@@ -44,6 +56,14 @@ class UserViewSet(viewsets.ModelViewSet):
             fail_silently=False,
         )
         return Response({'message': 'Код отправлен на email'})
+    
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def register(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response({'id': user.id, 'username': user.username}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def verify_customer_role(self, request):
