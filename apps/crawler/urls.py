@@ -3,8 +3,8 @@ from rest_framework.routers import DefaultRouter
 from .views import CrawlerSourceViewSet, CrawlerLogViewSet, run_crawler_manual
 
 router = DefaultRouter()
-router.register('sources', CrawlerSourceViewSet)
-router.register('logs', CrawlerLogViewSet)
+router.register('sources', CrawlerSourceViewSet, basename='crawlersource')
+router.register('logs', CrawlerLogViewSet, basename='crawlerlog')
 
 urlpatterns = [
     path('', include(router.urls)),
