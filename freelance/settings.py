@@ -5,10 +5,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = os.getenv('SECRET_KEY')
-DEBUG = os.getenv('DEBUG') == 'True'
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
 
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-change-in-production')
+DEBUG = os.getenv('DEBUG', 'True') == 'True'
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -25,8 +27,10 @@ INSTALLED_APPS = [
     'apps.users',
     'apps.orders',
     'apps.responses',
-    'apps.crawler',
+    'apps.messaging',
     'apps.notifications',
+    'apps.crawler',
+    'apps.reports',
 ]
 
 MIDDLEWARE = [
@@ -43,32 +47,59 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'freelance.urls'
 
-TEMPLATES = [... стандартный ...]
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [BASE_DIR / 'templates'],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
 
 WSGI_APPLICATION = 'freelance.wsgi.application'
 ASGI_APPLICATION = 'freelance.asgi.application'
 
+# Database
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'freelance',
-        'USER': 'freelance_user',
-        'PASSWORD': 'freelance_pass',
-        'HOST': 'db',
-        'PORT': 5432,
+        'NAME': os.getenv('DB_NAME', 'freelance'),
+        'USER': os.getenv('DB_USER', 'freelance_user'),
+        'PASSWORD': os.getenv('DB_PASSWORD', 'freelance_pass'),
+        'HOST': os.getenv('DB_HOST', 'localhost'),
+        'PORT': os.getenv('DB_PORT', '5432'),
     }
 }
 
-AUTH_PASSWORD_VALIDATORS = [...]
+# Password validation
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
 
 LANGUAGE_CODE = 'ru-ru'
 TIME_ZONE = 'Europe/Moscow'
+USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'static'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Custom user model
+AUTH_USER_MODEL = 'users.User'
+
+# REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -83,8 +114,9 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
 }
 
-CELERY_BROKER_URL = 'redis://redis:6379'
-CELERY_RESULT_BACKEND = 'redis://redis:6379'
+# Celery
+CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
+CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_BEAT_SCHEDULE = {
@@ -95,5 +127,53 @@ CELERY_BEAT_SCHEDULE = {
     'check-saved-searches': {
         'task': 'apps.notifications.tasks.check_saved_searches',
         'schedule': 1800.0,
+    },
+}
+
+# Channels (WebSocket)
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [os.getenv('REDIS_URL', 'redis://localhost:6379')],
+        },
+    },
+}
+
+# Email
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@example.com')
+
+# Scrapy settings (для краулера)
+ROBOTSTXT_OBEY = True
+DOWNLOAD_DELAY = 1.0
+CONCURRENT_REQUESTS_PER_DOMAIN = 1
+
+# Logging
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler'},
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'logs/django.log',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'apps.crawler': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
     },
 }
