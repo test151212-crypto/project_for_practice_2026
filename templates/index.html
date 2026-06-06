@@ -24,16 +24,15 @@
         .chat-container { border: 1px solid #ccc; height: 400px; display: flex; flex-direction: column; }
         .chat-messages { flex: 1; overflow-y: auto; padding: 12px; background: #fafafa; }
         .chat-input { display: flex; padding: 12px; background: white; border-top: 1px solid #ddd; }
-        .tabs { display: flex; gap: 8px; border-bottom: 1px solid #ddd; margin-bottom: 20px; }
-        .tab { padding: 8px 16px; cursor: pointer; background: none; border: none; font-size: 1rem; }
-        .tab.active { border-bottom: 2px solid #1e2a3e; font-weight: bold; }
-        .hidden { display: none; }
         .flex-between { display: flex; justify-content: space-between; align-items: center; }
         .notification { background: #eef2ff; border-left: 3px solid #1e2a3e; padding: 12px; margin-bottom: 8px; }
         .pagination { margin-top: 20px; text-align: center; }
         .pagination button { margin: 0 4px; }
         .order-card { cursor: pointer; transition: 0.1s; }
         .order-card:hover { background: #f8fafc; }
+        .auth-forms { display: flex; gap: 30px; max-width: 900px; margin: 100px auto; flex-wrap: wrap; justify-content: center; }
+        .auth-forms .card { flex: 1; min-width: 280px; }
+        hr { margin: 15px 0; }
     </style>
 </head>
 <body>
@@ -41,16 +40,14 @@
 
 <script>
     // ---------- Базовые настройки ----------
-    const API_BASE = 'http://localhost:8000/api';
-    let currentUser = null;        // { id, username, role, email }
+    const API_BASE = '';
+    let currentUser = null;
     let socket = null;
 
-    // Хелперы
     function getToken() { return localStorage.getItem('access_token'); }
     function setToken(access, refresh) { localStorage.setItem('access_token', access); localStorage.setItem('refresh_token', refresh); }
     function clearTokens() { localStorage.removeItem('access_token'); localStorage.removeItem('refresh_token'); }
 
-    // Декодирование JWT для получения user_id и role
     function parseJwt(token) {
         try {
             const base64Url = token.split('.')[1];
@@ -60,6 +57,7 @@
         } catch(e) { return null; }
     }
 
+    // Обёртка для авторизованных запросов (с токеном)
     async function request(endpoint, options = {}) {
         const token = getToken();
         const headers = {
@@ -69,10 +67,9 @@
         };
         const res = await fetch(`${API_BASE}${endpoint}`, { ...options, headers });
         if (res.status === 401) {
-            // пробуем обновить токен
             const refresh = localStorage.getItem('refresh_token');
             if (refresh) {
-                const refreshRes = await fetch(`${API_BASE}/token/refresh/`, {
+                const refreshRes = await fetch(`${API_BASE}/api/token/refresh/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ refresh })
@@ -80,7 +77,7 @@
                 if (refreshRes.ok) {
                     const data = await refreshRes.json();
                     setToken(data.access, refresh);
-                    return request(endpoint, options); // повторяем запрос
+                    return request(endpoint, options);
                 }
             }
             clearTokens();
@@ -113,7 +110,7 @@
     function renderApp() {
         const app = document.getElementById('app');
         if (!currentUser) {
-            app.innerHTML = renderLoginRegister();
+            app.innerHTML = renderAuthForms();
             attachAuthEvents();
             return;
         }
@@ -188,7 +185,7 @@
         else container.innerHTML = '<div class="card">Страница в разработке</div>';
     }
 
-    // ---------- Заказы с фильтрацией и пагинацией ----------
+    // ---------- Заказы с фильтрацией ----------
     async function renderOrders(container) {
         let orders = [];
         let filters = { skills_contains: '', budget_min: '', budget_max: '', status: 'published' };
@@ -196,7 +193,7 @@
         let totalPages = 1;
         const fetchOrders = async () => {
             const params = new URLSearchParams({ page, ...filters });
-            const data = await request(`/orders/orders/?${params}`);
+            const data = await request(`/api/orders/orders/?${params}`);
             orders = data.results;
             totalPages = Math.ceil(data.count / 20);
             render();
@@ -225,7 +222,6 @@
                     ${currentUser.role === 'freelancer' && order.status === 'published' ? `<button class="respondBtn" data-id="${order.id}">Откликнуться</button>` : ''}
                 </div>
             `).join('');
-            // пагинация
             const pagDiv = document.getElementById('pagination');
             pagDiv.innerHTML = '';
             for (let i = 1; i <= totalPages; i++) {
@@ -247,7 +243,7 @@
                 const deadline = prompt('Дедлайн в формате YYYY-MM-DDThh:mm');
                 const msg = prompt('Сопроводительное сообщение');
                 if (price && deadline && msg) {
-                    await request('/responses/responses/', { method: 'POST', body: JSON.stringify({ order: orderId, proposed_price: parseFloat(price), proposed_deadline: deadline, message: msg }) });
+                    await request('/api/responses/responses/', { method: 'POST', body: JSON.stringify({ order: orderId, proposed_price: parseFloat(price), proposed_deadline: deadline, message: msg }) });
                     showMessage('Отклик отправлен', false);
                 }
             }));
@@ -264,7 +260,7 @@
             const saveBtn = document.getElementById('saveSearchBtn');
             if (saveBtn) saveBtn.onclick = async () => {
                 const name = prompt('Название сохранённого поиска');
-                if (name) await request('/notifications/saved-searches/', { method: 'POST', body: JSON.stringify({ name, filters }) });
+                if (name) await request('/api/notifications/saved-searches/', { method: 'POST', body: JSON.stringify({ name, filters }) });
                 showMessage('Поиск сохранён', false);
             };
         };
@@ -272,7 +268,7 @@
     }
 
     async function renderCreateOrder(container) {
-        const categories = await request('/orders/categories/');
+        const categories = await request('/api/orders/categories/');
         container.innerHTML = `<div class="card"><h2>Создать заказ</h2>
             <input id="title" placeholder="Название"><textarea id="desc" placeholder="Описание"></textarea>
             <select id="category">${categories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select>
@@ -293,15 +289,14 @@
                 deadline: document.getElementById('deadline').value,
                 payment_type: 'fixed'
             };
-            await request('/orders/orders/', { method: 'POST', body: JSON.stringify(body) });
+            await request('/api/orders/orders/', { method: 'POST', body: JSON.stringify(body) });
             showMessage('Заказ отправлен на модерацию', false);
             loadView('orders');
         };
     }
 
-    // Отклики фрилансера
     async function renderFreelancerResponses(container) {
-        const data = await request('/responses/responses/');
+        const data = await request('/api/responses/responses/');
         container.innerHTML = `<div class="card"><h2>Мои отклики</h2>${data.results?.map(r => `
             <div class="flex-between"><b>${r.order_title}</b><span>${r.status}</span></div>
             <p>💰 ${r.proposed_price} ₽, срок: ${new Date(r.proposed_deadline).toLocaleDateString()}</p>
@@ -309,39 +304,37 @@
         `).join('') || 'Нет откликов'}</div>`;
     }
 
-    // Отклики для заказчика
     async function renderCustomerResponses(container) {
-        const data = await request('/responses/responses/');
+        const data = await request('/api/responses/responses/');
         container.innerHTML = `<div class="card"><h2>Отклики на мои заказы</h2>${data.results?.map(r => `
             <div class="card"><b>Заказ: ${r.order_title}</b><br>Фрилансер: ${r.freelancer_name}<br>Сообщение: ${r.message}<br>Цена: ${r.proposed_price}<br>
             ${r.status === 'sent' ? `<button class="acceptBtn" data-id="${r.id}">Принять</button> <button class="rejectBtn" data-id="${r.id}">Отклонить</button>` : `Статус: ${r.status}`}</div>
         `).join('') || 'Нет откликов'}</div>`;
-        document.querySelectorAll('.acceptBtn').forEach(btn => btn.onclick = async () => { await request(`/responses/responses/${btn.dataset.id}/accept/`, { method: 'POST' }); loadView('responsesOnMyOrders'); });
-        document.querySelectorAll('.rejectBtn').forEach(btn => btn.onclick = async () => { await request(`/responses/responses/${btn.dataset.id}/reject/`, { method: 'POST' }); loadView('responsesOnMyOrders'); });
+        document.querySelectorAll('.acceptBtn').forEach(btn => btn.onclick = async () => { await request(`/api/responses/responses/${btn.dataset.id}/accept/`, { method: 'POST' }); loadView('responsesOnMyOrders'); });
+        document.querySelectorAll('.rejectBtn').forEach(btn => btn.onclick = async () => { await request(`/api/responses/responses/${btn.dataset.id}/reject/`, { method: 'POST' }); loadView('responsesOnMyOrders'); });
     }
 
     async function renderSavedSearches(container) {
-        const searches = await request('/notifications/saved-searches/');
+        const searches = await request('/api/notifications/saved-searches/');
         container.innerHTML = `<div class="card"><h2>Сохранённые поиски</h2>${searches.map(s => `<div><b>${s.name}</b> <button class="deleteSearch" data-id="${s.id}">Удалить</button></div>`).join('')}</div>`;
-        document.querySelectorAll('.deleteSearch').forEach(btn => btn.onclick = async () => { await request(`/notifications/saved-searches/${btn.dataset.id}/`, { method: 'DELETE' }); loadView('savedSearches'); });
+        document.querySelectorAll('.deleteSearch').forEach(btn => btn.onclick = async () => { await request(`/api/notifications/saved-searches/${btn.dataset.id}/`, { method: 'DELETE' }); loadView('savedSearches'); });
     }
 
     async function renderExternalOrders(container) {
-        const orders = await request('/orders/orders/?source=external');
+        const orders = await request('/api/orders/orders/?source=external');
         container.innerHTML = `<div class="card"><h2>Внешние заказы</h2>${orders.results?.map(o => `<div><b>${o.title}</b> — ${o.external_source_name}<br><a href="${o.external_url}" target="_blank">Перейти</a></div>`).join('') || 'Нет внешних заказов'}</div>`;
     }
 
     async function renderProfile(container) {
         let profile;
-        if (currentUser.role === 'freelancer') profile = (await request('/users/freelancer-profiles/'))[0];
-        else profile = (await request('/users/customer-profiles/'))[0];
+        if (currentUser.role === 'freelancer') profile = (await request('/api/users/freelancer-profiles/'))[0];
+        else profile = (await request('/api/users/customer-profiles/'))[0];
         container.innerHTML = `<div class="card"><h2>Профиль</h2><pre>${JSON.stringify(profile, null, 2)}</pre><button id="refreshProfile">Обновить</button></div>`;
         document.getElementById('refreshProfile')?.addEventListener('click', () => loadView('profile'));
     }
 
-    // Модерация
     async function renderModerateOrders(container) {
-        const data = await request('/orders/orders/?status=moderation');
+        const data = await request('/api/orders/orders/?status=moderation');
         container.innerHTML = `<div class="card"><h2>Заказы на модерации</h2>${data.results?.map(o => `
             <div><b>${o.title}</b><br>${o.description}<br>
             <button class="approve" data-id="${o.id}">Одобрить</button>
@@ -349,52 +342,50 @@
             <button class="rework" data-id="${o.id}">На доработку</button>
             </div><hr>
         `).join('') || 'Нет заказов'}</div>`;
-        document.querySelectorAll('.approve').forEach(btn => btn.onclick = async () => { await request(`/orders/orders/${btn.dataset.id}/approve/`, { method: 'POST' }); loadView('moderateOrders'); });
-        document.querySelectorAll('.reject').forEach(btn => btn.onclick = async () => { const reason = prompt('Причина отклонения'); await request(`/orders/orders/${btn.dataset.id}/reject/`, { method: 'POST', body: JSON.stringify({ reason }) }); loadView('moderateOrders'); });
-        document.querySelectorAll('.rework').forEach(btn => btn.onclick = async () => { const reason = prompt('Причина доработки'); await request(`/orders/orders/${btn.dataset.id}/request_rework/`, { method: 'POST', body: JSON.stringify({ reason }) }); loadView('moderateOrders'); });
+        document.querySelectorAll('.approve').forEach(btn => btn.onclick = async () => { await request(`/api/orders/orders/${btn.dataset.id}/approve/`, { method: 'POST' }); loadView('moderateOrders'); });
+        document.querySelectorAll('.reject').forEach(btn => btn.onclick = async () => { const reason = prompt('Причина отклонения'); await request(`/api/orders/orders/${btn.dataset.id}/reject/`, { method: 'POST', body: JSON.stringify({ reason }) }); loadView('moderateOrders'); });
+        document.querySelectorAll('.rework').forEach(btn => btn.onclick = async () => { const reason = prompt('Причина доработки'); await request(`/api/orders/orders/${btn.dataset.id}/request_rework/`, { method: 'POST', body: JSON.stringify({ reason }) }); loadView('moderateOrders'); });
     }
 
     async function renderComplaints(container) {
-        const data = await request('/responses/complaints/');
+        const data = await request('/api/responses/complaints/');
         container.innerHTML = `<div class="card"><h2>Жалобы</h2>${data.map(c => `
             <div>${c.complaint_type} #${c.object_id}: ${c.reason} <button class="resolve" data-id="${c.id}">Решена</button></div>
         `).join('')}</div>`;
-        document.querySelectorAll('.resolve').forEach(btn => btn.onclick = async () => { await request(`/responses/complaints/${btn.dataset.id}/resolve/`, { method: 'POST', body: JSON.stringify({ note: 'решено' }) }); loadView('complaints'); });
+        document.querySelectorAll('.resolve').forEach(btn => btn.onclick = async () => { await request(`/api/responses/complaints/${btn.dataset.id}/resolve/`, { method: 'POST', body: JSON.stringify({ note: 'решено' }) }); loadView('complaints'); });
     }
 
     async function renderAdminStats(container) {
-        const stats = await request('/admin/dashboard/stats/');
+        const stats = await request('/api/admin/dashboard/stats/');
         container.innerHTML = `<div class="card"><h2>Сводная таблица</h2>
             <ul><li>Опубликовано: ${stats.published_orders}</li><li>На модерации: ${stats.moderation_orders}</li><li>В работе: ${stats.in_work_orders}</li><li>Завершено: ${stats.completed_orders}</li><li>Откликов: ${stats.total_responses}</li><li>Внешних заказов: ${stats.external_orders_found}</li><li>Ошибок краулера: ${stats.crawler_errors}</li><li>Активных источников: ${stats.active_sources}</li><li>Популярные категории: ${stats.popular_categories?.map(c => c.category__name).join(', ')}</li></ul>
             <button id="exportCsv">CSV</button><button id="exportXlsx">XLSX</button>
         </div>`;
-        document.getElementById('exportCsv').onclick = () => window.open(`${API_BASE}/admin/dashboard/export/?format=csv`);
-        document.getElementById('exportXlsx').onclick = () => window.open(`${API_BASE}/admin/dashboard/export/?format=xlsx`);
+        document.getElementById('exportCsv').onclick = () => window.open(`/api/admin/dashboard/export/?format=csv`);
+        document.getElementById('exportXlsx').onclick = () => window.open(`/api/admin/dashboard/export/?format=xlsx`);
     }
 
     async function renderSources(container) {
-        const sources = await request('/crawler/sources/');
+        const sources = await request('/api/crawler/sources/');
         container.innerHTML = `<div class="card"><h2>Источники краулера</h2><button id="newSource">Добавить источник</button>
             ${sources.map(s => `<div><b>${s.name}</b> (${s.status})<button class="runSource" data-id="${s.id}">Запустить</button></div>`).join('')}
         </div>`;
-        document.getElementById('newSource')?.addEventListener('click', () => alert('Реализуйте форму добавления через API /crawler/sources/'));
-        document.querySelectorAll('.runSource').forEach(btn => btn.onclick = async () => { await fetch(`${API_BASE}/crawler/run/${btn.dataset.id}/`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}` } }); showMessage('Краулер запущен', false); });
+        document.getElementById('newSource')?.addEventListener('click', () => alert('Реализуйте форму добавления через API /api/crawler/sources/'));
+        document.querySelectorAll('.runSource').forEach(btn => btn.onclick = async () => { await fetch(`/api/crawler/run/${btn.dataset.id}/`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}` } }); showMessage('Краулер запущен', false); });
     }
 
     async function renderNotifications(container) {
-        const notifs = await request('/notifications/notifications/');
+        const notifs = await request('/api/notifications/notifications/');
         container.innerHTML = `<div class="card"><h2>Уведомления</h2>${notifs.map(n => `
             <div class="notification"><b>${n.title}</b><br>${n.message}<br><small>${new Date(n.created_at).toLocaleString()}</small>
             ${!n.is_read ? `<button data-id="${n.id}" class="markRead">Прочитано</button>` : ''}</div>
         `).join('')}</div>`;
-        document.querySelectorAll('.markRead').forEach(btn => btn.onclick = async () => { await request(`/notifications/notifications/${btn.dataset.id}/mark_read/`, { method: 'POST' }); loadView('notifications'); });
+        document.querySelectorAll('.markRead').forEach(btn => btn.onclick = async () => { await request(`/api/notifications/notifications/${btn.dataset.id}/mark_read/`, { method: 'POST' }); loadView('notifications'); });
     }
 
-    // Детали заказа и чат (заглушка)
     async function showOrderDetail(orderId) {
-        const order = await request(`/orders/orders/${orderId}/`);
+        const order = await request(`/api/orders/orders/${orderId}/`);
         alert(`Заказ: ${order.title}\nСтатус: ${order.status}\nОписание: ${order.description}\nДля чата необходимо быть участником заказа.`);
-        // Здесь можно добавить переход в чат, если пользователь участник
     }
 
     function logout() {
@@ -404,30 +395,34 @@
         renderApp();
     }
 
-    // ---------- Аутентификация ----------
-    function renderLoginRegister() {
-        return `<div class="card" style="max-width:400px;margin:100px auto">
-            <div class="tabs"><button class="tab active" data-tab="login">Вход</button><button class="tab" data-tab="register">Регистрация</button></div>
-            <div id="loginForm"><input id="loginUsername" placeholder="Логин"><input id="loginPassword" type="password" placeholder="Пароль"><button id="loginBtn">Войти</button></div>
-            <div id="registerForm" class="hidden"><input id="regUsername" placeholder="Логин"><input id="regEmail" placeholder="Email"><input id="regPassword" type="password" placeholder="Пароль"><button id="registerBtn">Зарегистрироваться</button></div>
-        </div>`;
+    // ---------- Формы входа и регистрации (без авторизации) ----------
+    function renderAuthForms() {
+        return `
+            <div class="auth-forms">
+                <div class="card">
+                    <h2>Вход</h2>
+                    <input id="loginUsername" placeholder="Логин">
+                    <input id="loginPassword" type="password" placeholder="Пароль">
+                    <button id="loginBtn">Войти</button>
+                </div>
+                <div class="card">
+                    <h2>Регистрация</h2>
+                    <input id="regUsername" placeholder="Логин">
+                    <input id="regEmail" placeholder="Email">
+                    <input id="regPassword" type="password" placeholder="Пароль">
+                    <button id="registerBtn">Зарегистрироваться</button>
+                </div>
+            </div>
+        `;
     }
 
     function attachAuthEvents() {
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                const target = tab.dataset.tab;
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                document.getElementById('loginForm').classList.toggle('hidden', target !== 'login');
-                document.getElementById('registerForm').classList.toggle('hidden', target !== 'register');
-            });
-        });
+        // Вход
         document.getElementById('loginBtn').onclick = async () => {
             const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
             try {
-                const res = await fetch(`${API_BASE}/token/`, {
+                const res = await fetch(`/api/token/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
@@ -440,43 +435,56 @@
                     currentUser = {
                         id: payload.user_id,
                         username: username,
-                        role: payload.role || 'freelancer', // роль должна быть в payload, иначе по умолчанию
+                        role: payload.role || 'freelancer',
                         email: ''
                     };
                 } else {
-                    // fallback: получаем пользователя через API
-                    const userData = await request('/users/users/'); // без фильтрации, но получим список
-                    const found = userData.find(u => u.username === username);
+                    const users = await request('/api/users/users/');
+                    const found = users.find(u => u.username === username);
                     if (found) currentUser = found;
                 }
                 localStorage.setItem('user', JSON.stringify(currentUser));
                 renderApp();
             } catch(e) { showMessage(e.message); }
         };
+
+        // Регистрация – используем прямой fetch, без обёртки request
         document.getElementById('registerBtn').onclick = async () => {
             const username = document.getElementById('regUsername').value;
             const email = document.getElementById('regEmail').value;
             const password = document.getElementById('regPassword').value;
-            await request('/users/users/', { method: 'POST', body: JSON.stringify({ username, email, password, role: 'freelancer' }) });
-            showMessage('Регистрация успешна, теперь войдите', false);
+            try {
+                const res = await fetch(`/api/users/users/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password, role: 'freelancer' })
+                });
+                if (!res.ok) {
+                    const err = await res.text();
+                    throw new Error(err);
+                }
+                showMessage('Регистрация успешна, теперь войдите', false);
+                // Очищаем поля (опционально)
+                document.getElementById('regUsername').value = '';
+                document.getElementById('regEmail').value = '';
+                document.getElementById('regPassword').value = '';
+            } catch(e) { showMessage(e.message); }
         };
     }
 
     function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
 
-    // Инициализация: проверяем токен и восстанавливаем пользователя
+    // Инициализация: проверяем токен
     (async function init() {
         const token = getToken();
         if (token) {
             const payload = parseJwt(token);
             if (payload && payload.exp * 1000 > Date.now()) {
-                // пытаемся получить данные пользователя
                 try {
-                    // если есть эндпоинт /users/users/me/ – используем, но его нет, попробуем получить через список
-                    const users = await request('/users/users/');
+                    const users = await request('/api/users/users/');
                     const found = users.find(u => u.id === payload.user_id);
                     if (found) currentUser = found;
-                    else currentUser = { id: payload.user_id, username: payload.username, role: payload.role || 'freelancer', email: '' };
+                    else currentUser = { id: payload.user_id, username: payload.username || 'user', role: payload.role || 'freelancer', email: '' };
                 } catch(e) {
                     currentUser = { id: payload.user_id, username: payload.username || 'user', role: payload.role || 'freelancer', email: '' };
                 }
