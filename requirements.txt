@@ -6,7 +6,7 @@ django-simple-history==3.4.0
 psycopg2-binary==2.9.9
 redis==5.0.1
 celery==5.3.4
-celery-beat==2.5.0
+django-celery-beat==2.5.0
 channels==4.0.0
 channels-redis==4.1.0
 scrapy==2.11.0
