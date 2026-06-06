@@ -75,7 +75,7 @@ DATABASES = {
         'PASSWORD': os.getenv('DB_PASSWORD', 'freelance_pass'),
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '5432'),
-        'DISABLE_SERVER_SIDE_CURSORS': True,
+        'DISABLE_SERVER_SIDE_CURSORS': True,   # Добавить эту строку
     }
 }
 
