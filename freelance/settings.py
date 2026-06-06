@@ -115,6 +115,7 @@ REST_FRAMEWORK = {
 }
 
 # Celery
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_BROKER_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
 CELERY_RESULT_BACKEND = os.getenv('REDIS_URL', 'redis://localhost:6379')
 CELERY_ACCEPT_CONTENT = ['json']
